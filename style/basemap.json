@@ -1,0 +1,267 @@
+{
+  "version": 8,
+  "metadata": {
+    "comentari": [
+      "Estil MapLibre del visor. Es carrega amb fetch() des de js/style.js.",
+      "",
+      "Els valors marcats amb {{...}} NO son valors finals: js/style.js els",
+      "substitueix just abans de crear el mapa, perque depenen de config.js",
+      "(generat) i de la taxonomia. Son aquests sis:",
+      "  {{url.base}}         ruta del PMTiles de la cartografia base",
+      "  {{url.access}}       ruta del PMTiles d'accessibilitat",
+      "  {{url.glyphs}}       plantilla dels glifs de fonts/ (el numero dels clusters)",
+      "  {{tiles.pois}}       URL de les tessel·les MVT dels punts d'interes",
+      "  {{tiles.influence}}  URL de les tessel·les MVT de les arees d'influencia",
+      "  {{color.category}}   expressio 'match' que dona un color a cada categoria",
+      "",
+      "Tota la resta es editable aqui mateix sense tocar cap fitxer .js:",
+      "colors, gruixos, zooms minims i l'ordre de pintat (l'ordre de 'layers')."
+    ]
+  },
+
+  "glyphs": "{{url.glyphs}}",
+
+  "sources": {
+    "base": {
+      "type": "vector",
+      "url": "{{url.base}}",
+      "attribution": "© OpenStreetMap contributors (ODbL) · límits: ICGC"
+    },
+    "access": {
+      "type": "vector",
+      "url": "{{url.access}}"
+    },
+    "live_pois": {
+      "type": "vector",
+      "tiles": ["{{tiles.pois}}"],
+      "minzoom": 10,
+      "maxzoom": 17
+    },
+    "live_influence": {
+      "type": "vector",
+      "tiles": ["{{tiles.influence}}"],
+      "minzoom": 10,
+      "maxzoom": 17
+    },
+    "query": {
+      "type": "geojson",
+      "data": { "type": "FeatureCollection", "features": [] }
+    }
+  },
+
+  "layers": [
+    {
+      "id": "bg",
+      "type": "background",
+      "paint": { "background-color": "#12140f" }
+    },
+
+    {
+      "id": "landuse",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "landuse",
+      "paint": {
+        "fill-color": ["match", ["get", "class"],
+          "forest", "#232c1e", "scrub", "#252a1d", "grassland", "#2a2f20",
+          "agricultural", "#2d2b1e", "green", "#22301f",
+          "residential", "#26251f", "industrial", "#2a2622", "commercial", "#2b2620",
+          "#1c1e18"],
+        "fill-opacity": 0.9
+      }
+    },
+
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "water",
+      "paint": { "fill-color": "#1b2b38" }
+    },
+    {
+      "id": "waterways",
+      "type": "line",
+      "source": "base",
+      "source-layer": "waterways",
+      "paint": {
+        "line-color": "#2d4a5e",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.4, 15, 2]
+      }
+    },
+
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "base",
+      "source-layer": "buildings",
+      "minzoom": 13,
+      "paint": { "fill-color": "#3a3a33", "fill-opacity": 0.85 }
+    },
+
+    {
+      "id": "access",
+      "type": "fill",
+      "source": "access",
+      "source-layer": "access",
+      "minzoom": 12,
+      "metadata": {
+        "comentari": [
+          "Accessibilitat: els edificis es tornen a pintar a sobre de la base",
+          "segons la distancia d_<subcategoria>, que viatja dins la tessel·la.",
+          "El color final el calcula js/layer-accessibility.js cada cop que es",
+          "mou el llindar; el d'aqui nomes es el valor inicial.",
+          "Des del zoom 12, un nivell per sota dels edificis de la base: la",
+          "capa porta tots els edificis del terme, sigui quin sigui el seu us,",
+          "i per aixo la ciutat sencera es veu completa sense la base.",
+          "Comenca amagada: nomes s'activa amb una subcategoria triada."
+        ]
+      },
+      "layout": { "visibility": "none" },
+      "paint": { "fill-color": "#3a3a33", "fill-opacity": 0.95 }
+    },
+
+    {
+      "id": "roads",
+      "type": "line",
+      "source": "base",
+      "source-layer": "roads",
+      "paint": {
+        "line-color": ["match", ["get", "class"],
+          "motorway", "#8a7a4a", "primary", "#6f6644", "secondary", "#55523c",
+          "#3b3d34"],
+        "line-width": ["interpolate", ["linear"], ["zoom"],
+          9, ["match", ["get", "class"], "motorway", 1.4, "primary", 1.0, 0.3],
+          16, ["match", ["get", "class"], "motorway", 6, "primary", 4.5, 1.6]]
+      }
+    },
+
+    {
+      "id": "admin",
+      "type": "line",
+      "source": "base",
+      "source-layer": "admin",
+      "paint": { "line-color": "#5a6049", "line-dasharray": [3, 2], "line-width": 1 }
+    },
+
+    {
+      "id": "influence",
+      "type": "fill",
+      "source": "live_influence",
+      "source-layer": "influence",
+      "metadata": {
+        "comentari": "Capa viva: el buffer el calcula PostGIS i arriba ja dibuixat."
+      },
+      "layout": { "visibility": "none" },
+      "paint": { "fill-color": "{{color.category}}", "fill-opacity": 0.2 }
+    },
+    {
+      "id": "influence-line",
+      "type": "line",
+      "source": "live_influence",
+      "source-layer": "influence",
+      "layout": { "visibility": "none" },
+      "paint": { "line-color": "{{color.category}}", "line-width": 1, "line-opacity": 0.7 }
+    },
+
+    {
+      "id": "pois",
+      "type": "circle",
+      "source": "live_pois",
+      "source-layer": "pois",
+      "metadata": {
+        "comentari": "Capa viva: els punts els filtra PostGIS canviant la URL de les tessel·les."
+      },
+      "paint": {
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2.5, 16, 6],
+        "circle-color": "{{color.category}}",
+        "circle-stroke-width": 1,
+        "circle-stroke-color": "#12140f"
+      }
+    },
+    {
+      "id": "poi-clusters",
+      "type": "circle",
+      "source": "live_pois",
+      "source-layer": "clusters",
+      "metadata": {
+        "comentari": [
+          "Clusters: fins al zoom 13 i sense subcategoria, PostGIS agrupa els",
+          "punts en cel·les de 32 px (sql/functions/020_mvt.sql). La mida creix",
+          "amb l'arrel del nombre de punts (n), perque l'area del cercle hi sigui",
+          "proporcional. Amb una categoria triada porten el seu color; sense",
+          "filtre no tenen categoria i surten en el color neutre.",
+          "El clic hi acosta el mapa (js/layer-pois.js)."
+        ]
+      },
+      "paint": {
+        "circle-radius": ["interpolate", ["linear"], ["sqrt", ["get", "n"]], 1.4, 8, 10, 12.5, 30, 16],
+        "circle-color": ["case", ["has", "category"], "{{color.category}}", "#e0ddd0"],
+        "circle-opacity": 0.9,
+        "circle-stroke-width": 1.5,
+        "circle-stroke-color": "#12140f"
+      }
+    },
+    {
+      "id": "poi-cluster-count",
+      "type": "symbol",
+      "source": "live_pois",
+      "source-layer": "clusters",
+      "metadata": {
+        "comentari": "El numero de cada cluster; a partir de 1.000, en milers ('1k', '2k'...)."
+      },
+      "layout": {
+        "text-field": ["case", [">=", ["get", "n"], 1000],
+          ["concat", ["to-string", ["floor", ["/", ["get", "n"], 1000]]], "k"],
+          ["to-string", ["get", "n"]]],
+        "text-font": ["Noto Sans Medium"],
+        "text-size": 11,
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      "paint": { "text-color": "#12140f" }
+    },
+
+    {
+      "id": "q-area",
+      "type": "fill",
+      "source": "query",
+      "metadata": {
+        "comentari": [
+          "Les quatre capes 'q-*' pinten el resultat de les consultes en viu.",
+          "Totes llegeixen la mateixa font GeoJSON i es reparteixen la feina",
+          "amb un filtre sobre la propietat 'kind' que hi posa js/query-run.js:",
+          "area = el cercle del radi, link = la linia cap a cada resultat,",
+          "origin = el punt on s'ha fet clic."
+        ]
+      },
+      "filter": ["==", ["get", "kind"], "area"],
+      "paint": { "fill-color": "#c3d64b", "fill-opacity": 0.12 }
+    },
+    {
+      "id": "q-area-line",
+      "type": "line",
+      "source": "query",
+      "filter": ["==", ["get", "kind"], "area"],
+      "paint": { "line-color": "#c3d64b", "line-width": 1.5, "line-dasharray": [2, 2] }
+    },
+    {
+      "id": "q-links",
+      "type": "line",
+      "source": "query",
+      "filter": ["==", ["get", "kind"], "link"],
+      "paint": { "line-color": "#c3d64b", "line-width": 1.5, "line-opacity": 0.8 }
+    },
+    {
+      "id": "q-origin",
+      "type": "circle",
+      "source": "query",
+      "filter": ["==", ["get", "kind"], "origin"],
+      "paint": {
+        "circle-radius": 6,
+        "circle-color": "#12140f",
+        "circle-stroke-width": 3,
+        "circle-stroke-color": "#c3d64b"
+      }
+    }
+  ]
+}

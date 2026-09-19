@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>geodb-osm — Barcelona</title>
+<!-- Només l'esquelet del panell: l'aspecte és a app.css i el comportament a js/ -->
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<link href="./app.css" rel="stylesheet" />
+</head>
+<body>
+<div id="map"></div>
+
+<!-- Els id d'aquest panell són el contracte amb el codi: js/ui.js els busca
+     un per un amb $('...'). Si en canvies cap, canvia'l també allà.
+     Tres blocs: què es veu (1), què s'analitza (2) i què es consulta (3).
+     La capçalera queda sempre visible: el botó plega la resta del panell,
+     que en una pantalla estreta tapava tot el mapa. -->
+<div id="panel">
+  <header id="panel-head">
+    <div>
+      <h1>geodb-osm</h1>
+      <div class="sub">Ciutat de Barcelona · OpenStreetMap + PostGIS</div>
+    </div>
+    <button type="button" id="panel-toggle" aria-controls="panel-body" aria-expanded="true"></button>
+  </header>
+
+  <div id="panel-body">
+
+  <!-- 1. Capes i cartografia: només visualització -->
+  <section class="pblock">
+    <h2><span class="num">1</span> Capes i cartografia</h2>
+
+    <h3>Cartografia base</h3>
+    <div class="grid2">
+      <label><input type="checkbox" id="c-roads" checked> Xarxa viària</label>
+      <label id="lbl-buildings"><input type="checkbox" id="c-buildings" checked> Edificis</label>
+      <label><input type="checkbox" id="c-landuse" checked> Usos del sòl</label>
+      <label><input type="checkbox" id="c-water" checked> Aigua</label>
+    </div>
+
+    <h3>Punts d'interès (POIs)
+      <button type="button" class="info" data-tip="tip-pois" aria-label="Què són els punts d'interès?">i</button>
+    </h3>
+    <label><input type="checkbox" id="c-pois" checked> Mostra els POIs</label>
+    <label class="block">Categoria
+      <select id="sel-cat"></select>
+    </label>
+    <label class="block">Subcategoria
+      <select id="sel-sub"></select>
+    </label>
+  </section>
+
+  <!-- 2. Anàlisi: sempre sobre la subcategoria triada al bloc 1 -->
+  <section class="pblock">
+    <h2><span class="num">2</span> Anàlisi
+      <button type="button" class="info" data-tip="tip-analisi" aria-label="Com es calcula l'anàlisi?">i</button>
+    </h2>
+    <p class="note" id="an-note"></p>
+
+    <label id="lbl-access"><input type="checkbox" id="c-access"> Accessibilitat dels edificis</label>
+    <div class="sub-ctl" id="ctl-access">
+      <!-- El pas de 50 m no és arbitrari: etl/build_tiles.sh arrodoneix les
+           distàncies a 25 m, i la llegenda (0,5×, 1× i 2× el llindar) només
+           és exacta si els talls en són múltiples -->
+      <label class="block" id="lbl-thr">Llindar de distància <span class="val" id="thr-val">500 m</span>
+        <input type="range" id="threshold" min="100" max="3000" step="50" value="500">
+      </label>
+      <div id="legend" hidden></div>
+    </div>
+
+    <label id="lbl-infl"><input type="checkbox" id="c-infl"> Àrea d'influència</label>
+    <div class="sub-ctl" id="ctl-infl">
+      <label class="block">Radi
+        <select id="radius">
+          <option value="300">300 m</option>
+          <option value="500" selected>500 m</option>
+          <option value="1000">1.000 m</option>
+        </select>
+      </label>
+    </div>
+    <p class="note">Distàncies en línia recta (euclidianes), no per la xarxa viària.
+      Només es consideren els edificis mapats a OpenStreetMap.</p>
+  </section>
+
+  <!-- 3. Consultes espacials: plegat d'entrada. Cap consulta activa vol dir
+       que el clic obre la fitxa dels punts; tornar a clicar el botó actiu la
+       desactiva, i plegar el bloc també (js/query-modes.js), perquè el clic
+       no llanci consultes des d'un bloc que no es veu. -->
+  <details class="pblock" id="queries">
+    <summary><h2><span class="num">3</span> Consultes espacials
+      <button type="button" class="info" data-tip="tip-queries" aria-label="Com funcionen les consultes?">i</button>
+    </h2></summary>
+    <div class="seg" id="mode">
+      <button type="button" data-mode="nearest" aria-pressed="false">Més propers</button>
+      <button type="button" data-mode="radius" aria-pressed="false">Resum en un radi</button>
+    </div>
+    <div id="opt-nearest" hidden>
+      <label class="block">Resultats
+        <select id="nearest-n">
+          <option>3</option><option selected>5</option><option>10</option>
+        </select>
+      </label>
+    </div>
+    <div id="opt-radius" hidden>
+      <!-- Mateixes unitats i pas que el llindar del bloc 2; el màxim el fixa
+           api.radius_summary (2 km) -->
+      <label class="block">Radi <span class="val" id="q-radius-val">500 m</span>
+        <input type="range" id="q-radius" min="100" max="2000" step="50" value="500">
+      </label>
+    </div>
+    <p class="note" id="mode-note"></p>
+    <div id="results"></div>
+  </details>
+
+  <div id="status">Carregant…</div>
+  </div>
+</div>
+
+<!-- Textos dels botons (i). js/ui.js els copia al globus flotant #tip: van
+     fora del panell perquè el panell té scroll i els retallaria. -->
+<template id="tip-pois">
+  <b>Dades d'OpenStreetMap (OSM)</b>
+  <p>Els punts d'interès provenen d'una extracció massiva d'OpenStreetMap per a
+  l'àmbit de Barcelona (terme municipal + 1 km), classificats en categories i
+  subcategories pròpies d'aquest projecte.</p>
+  <p>Vistos de lluny (fins al zoom 13) i sense cap subcategoria triada, els
+  punts propers s'agrupen: cada cercle diu quants n'hi ha, i un clic hi
+  apropa el mapa. Amb una subcategoria, o de més a prop, es veuen un per un.</p>
+  <p>No és cartografia oficial: OSM és un mapa col·laboratiu, i les dades poden
+  no ser exhaustives ni estar del tot actualitzades.</p>
+  <p>La resta de capes (xarxa viària, edificis, usos del sòl i xarxa
+  hidrogràfica) també són d'OSM. Els límits administratius són de l'ICGC.</p>
+</template>
+
+<template id="tip-analisi">
+  <b>Anàlisi de la subcategoria triada</b>
+  <p><b>Accessibilitat:</b> per a cada edifici del terme, sigui quin sigui el
+  seu ús, la distància al POI més proper de la subcategoria. Està precalculada
+  a PostGIS i viatja dins del fitxer de tessel·les: moure el llindar no fa cap
+  petició. Es veu des del zoom 12.</p>
+  <p><b>Àrea d'influència:</b> la zona a menys del radi triat d'algun POI de la
+  subcategoria. Els polígons de 300, 500 i 1.000 m estan precalculats a
+  PostGIS i se serveixen com a tessel·les.</p>
+</template>
+
+<template id="tip-queries">
+  <b>Consultes espacials en temps real</b>
+  <p>Totes dues fan servir la categoria o subcategoria triada al bloc 1. Cada
+  clic al mapa crida una funció de PostGIS (Supabase) que calcula la resposta
+  en aquell moment; sota el resultat se'n mostra el temps.</p>
+
+  <div class="tip-case">
+    <!-- Clic (anell), tres serveis numerats per distància i un de més lluny
+         que no entra al resultat -->
+    <svg viewBox="0 0 96 64" width="96" height="64" aria-hidden="true">
+      <rect width="96" height="64" rx="6" fill="#12140f"/>
+      <circle cx="88" cy="56" r="2.5" fill="#6b6d63"/>
+      <circle cx="8" cy="8" r="2.5" fill="#6b6d63"/>
+      <g stroke="#c3d64b" stroke-width="1.2" opacity=".8">
+        <line x1="30" y1="36" x2="50" y2="22"/>
+        <line x1="30" y1="36" x2="58" y2="48"/>
+        <line x1="30" y1="36" x2="76" y2="18"/>
+      </g>
+      <circle cx="30" cy="36" r="4" fill="#12140f" stroke="#c3d64b" stroke-width="2"/>
+      <g fill="#c3d64b" stroke="#12140f" stroke-width="1.5">
+        <circle cx="50" cy="22" r="6.5"/><circle cx="58" cy="48" r="6.5"/><circle cx="76" cy="18" r="6.5"/>
+      </g>
+      <g fill="#12140f" font-family="Arial,sans-serif" font-size="8" font-weight="700"
+         text-anchor="middle" dominant-baseline="central">
+        <text x="50" y="22">1</text><text x="58" y="48">2</text><text x="76" y="18">3</text>
+      </g>
+    </svg>
+    <div><b>Més propers</b>
+      <p>Els N serveis més propers al clic, ordenats per distància en línia recta.</p>
+      <p class="eg">Farmàcia + clic a la plaça de Catalunya → les 5 farmàcies més
+      properes, amb la distància de cadascuna.</p>
+    </div>
+  </div>
+
+  <div class="tip-case">
+    <!-- Cercle del radi: compten els punts de dins, no els de fora -->
+    <svg viewBox="0 0 96 64" width="96" height="64" aria-hidden="true">
+      <rect width="96" height="64" rx="6" fill="#12140f"/>
+      <circle cx="48" cy="32" r="24" fill="#c3d64b" fill-opacity=".12"
+              stroke="#c3d64b" stroke-width="1.2" stroke-dasharray="3 2"/>
+      <g fill="#ef4444"><circle cx="38" cy="22" r="3"/><circle cx="58" cy="40" r="3"/><circle cx="44" cy="44" r="3"/></g>
+      <g fill="#3b82f6"><circle cx="60" cy="24" r="3"/><circle cx="34" cy="36" r="3"/></g>
+      <g fill="#6b6d63"><circle cx="10" cy="12" r="2.5"/><circle cx="86" cy="52" r="2.5"/><circle cx="84" cy="10" r="2.5"/></g>
+      <circle cx="48" cy="32" r="3.5" fill="#12140f" stroke="#c3d64b" stroke-width="2"/>
+    </svg>
+    <div><b>Resum en un radi</b>
+      <p>Quants serveis hi ha dins del cercle, per categories (desplegables fins
+      a la subcategoria), i quants edificis.</p>
+      <p class="eg">Salut + 500 m al voltant de la plaça de Catalunya → els
+      serveis de salut del cercle, desglossats per tipus.</p>
+    </div>
+  </div>
+
+  <p>Tornar a clicar el botó actiu desactiva la consulta: el clic torna a obrir
+  la fitxa dels punts.</p>
+</template>
+
+<!-- Biblioteques externes: defineixen maplibregl i pmtiles com a globals -->
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.0/dist/pmtiles.js"></script>
+
+<!-- Fitxers generats per etl/web_config.sh: defineixen window.GEODB i
+     window.GEODB_CATEGORIES. Van com a scripts clàssics, i per tant
+     s'executen abans que el mòdul de sota, que ja els troba posats. -->
+<script src="./config.js"></script>
+<script src="./categories.js"></script>
+
+<!-- Tot el codi del visor penja d'aquest únic mòdul. type="module" fa que el
+     navegador segueixi tot sol la cadena d'imports de js/. -->
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

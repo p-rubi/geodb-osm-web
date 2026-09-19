@@ -1,0 +1,27 @@
+{
+  "_comentari": [
+    "Escala de colors de la capa d'accessibilitat.",
+    "",
+    "Es l'unica simbologia que no pot viure a basemap.json, perque es recalcula",
+    "cada cop que l'usuari mou el llindar: els talls no son distancies fixes,",
+    "sino multiples del llindar triat al panell.",
+    "",
+    "'factor' es el multiplicador del llindar que tanca cada classe. Amb un",
+    "llindar de 500 m, factor 0.5 vol dir '<= 250 m'. L'ultima classe ha de",
+    "tenir factor null: es el 'tot el que queda per sobre'.",
+    "",
+    "Per canviar l'escala nomes cal editar aquest fitxer: es poden afegir o",
+    "treure classes i el codi i la llegenda s'hi adapten sols.",
+    "",
+    "'sense_dada' pinta els edificis que no porten la distancia. Tippecanoe",
+    "no escriu els atributs nuls, i passa si a l'ambit no hi ha cap servei de",
+    "la subcategoria: no es que estigui lluny, es que no se sap."
+  ],
+  "sense_dada": "#2c2c28",
+  "classes": [
+    { "factor": 0.5,  "color": "#4d7c3a" },
+    { "factor": 1,    "color": "#c3d64b" },
+    { "factor": 2,    "color": "#e8a33d" },
+    { "factor": null, "color": "#d1495b" }
+  ]
+}
